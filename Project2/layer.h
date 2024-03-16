@@ -15,13 +15,13 @@ public:
 
 	const size_t width, height;
 
-	shared_ptr<float> d_w;
-	shared_ptr<float> d_b;
-	shared_ptr<float> d_dw;
-	shared_ptr<float> d_db;
+	shared_ptr<float> d_weight;
+	shared_ptr<float> d_bias;
+	shared_ptr<float> d_weight_gradient;
+	shared_ptr<float> d_bias_gradient;
 
-	shared_ptr<float> h_w;
-	shared_ptr<float> h_b;
-	shared_ptr<float> h_dw;
-	shared_ptr<float> h_db;
+	shared_ptr<float> h_weight;
+	shared_ptr<float> h_bias;
+	shared_ptr<float> h_weight_gradient;
+	shared_ptr<float> h_bias_gradient;
 };

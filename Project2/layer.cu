@@ -17,24 +17,24 @@ const size_t threads_num = x_threads * y_threads * z_threads;
 
 Layer::Layer(size_t width, size_t height) :
 	width(width), height(height),
-	h_w(allocateOnHost<float>(width* height)),
-	h_b(allocateOnHost<float>(1)),
-	h_dw(allocateOnHost<float>(width* height)),
-	h_db(allocateOnHost<float>(1)),
-	d_w(allocateOnDevice<float>(width* height)),
-	d_b(allocateOnDevice<float>(1)),
-	d_dw(allocateOnDevice<float>(width* height)),
-	d_db(allocateOnDevice<float>(1)) {
+	h_weight(allocateOnHost<float>(width* height)),
+	h_bias(allocateOnHost<float>(1)),
+	h_weight_gradient(allocateOnHost<float>(width* height)),
+	h_bias_gradient(allocateOnHost<float>(1)),
+	d_weight(allocateOnDevice<float>(width* height)),
+	d_bias(allocateOnDevice<float>(1)),
+	d_weight_gradient(allocateOnDevice<float>(width* height)),
+	d_bias_gradient(allocateOnDevice<float>(1)) {
 
-	memsetOnHost(h_w.get(), 0.0f, width * height);
-	memsetOnHost(h_b.get(), 0.0f, 1);
-	memsetOnHost(h_dw.get(), 0.0f, width * height);
-	memsetOnHost(h_db.get(), 0.0f, 1);
+	memsetOnHost(h_weight.get(), 0.0f, width * height);
+	memsetOnHost(h_bias.get(), 0.0f, 1);
+	memsetOnHost(h_weight_gradient.get(), 0.0f, width * height);
+	memsetOnHost(h_bias_gradient.get(), 0.0f, 1);
 
-	cudaMemcpy(d_w.get(), h_w.get(), width * height * sizeof(float), cudaMemcpyHostToDevice);
-	cudaMemcpy(d_b.get(), h_b.get(), sizeof(float), cudaMemcpyHostToDevice);
-	cudaMemcpy(d_dw.get(), h_dw.get(), width * height * sizeof(float), cudaMemcpyHostToDevice);
-	cudaMemcpy(d_db.get(), h_db.get(), sizeof(float), cudaMemcpyHostToDevice);
+	cudaMemcpy(d_weight.get(), h_weight.get(), width * height * sizeof(float), cudaMemcpyHostToDevice);
+	cudaMemcpy(d_bias.get(), h_bias.get(), sizeof(float), cudaMemcpyHostToDevice);
+	cudaMemcpy(d_weight_gradient.get(), h_weight_gradient.get(), width * height * sizeof(float), cudaMemcpyHostToDevice);
+	cudaMemcpy(d_bias_gradient.get(), h_bias_gradient.get(), sizeof(float), cudaMemcpyHostToDevice);
 }
 
 __device__ __host__ float sigmoid(float x) {
@@ -178,7 +178,7 @@ float Layer::forward(MNIST dataset) {
 	dim3 threads(x_threads, y_threads, 1);
 	dim3 blocks(1, 1, m);
 	auto d_a = allocateOnDevice<float>(m);
-	product << <blocks, threads >> > (d_x.get(), d_w.get(), d_b.get(), d_a.get(), width, height, m);
+	product << <blocks, threads >> > (d_x.get(), d_weight.get(), d_bias.get(), d_a.get(), width, height, m);
 	cudaDeviceSynchronize();
 
 
@@ -195,7 +195,7 @@ float Layer::forward(MNIST dataset) {
 
 	threads = threads_num;
 	blocks = (width * height + threads.x - 1) / threads.x;
-	memsetOnDevice << <blocks, threads >> > (d_dw.get(), 0.0f, width * height);
+	memsetOnDevice << <blocks, threads >> > (d_weight_gradient.get(), 0.0f, width * height);
 	cudaDeviceSynchronize();
 
 	threads = { (unsigned int)x_threads, (unsigned int)y_threads, 1 };
@@ -204,7 +204,7 @@ float Layer::forward(MNIST dataset) {
 		(unsigned int)((height + threads.y - 1) / threads.y),
 		(unsigned int)m
 	};
-	weights_gradient << <blocks, threads >> > (d_x.get(), d_y.get(), d_a.get(), d_dw.get(), width, height);
+	weights_gradient << <blocks, threads >> > (d_x.get(), d_y.get(), d_a.get(), d_weight_gradient.get(), width, height);
 	cudaDeviceSynchronize();
 
 
@@ -213,8 +213,8 @@ float Layer::forward(MNIST dataset) {
 	auto d_db_partial = allocateOnDevice<float>(blocks.x);
 	bias_gradient << <blocks, threads >> > (d_y.get(), d_a.get(), d_db_partial.get(), m);
 	cudaDeviceSynchronize();
-	auto h_db = sumOnHost<float>(d_db_partial.get(), blocks.x) / m;
-	cudaMemcpy(d_db.get(), &h_db, sizeof(float), cudaMemcpyHostToDevice);
+	auto h_bias_gradient = sumOnHost<float>(d_db_partial.get(), blocks.x) / m;
+	cudaMemcpy(d_bias_gradient.get(), &h_bias_gradient, sizeof(float), cudaMemcpyHostToDevice);
 	return h_cost;
 
 
@@ -250,13 +250,13 @@ __global__ void bias_backward(float* b, float* db, float learning_rate) {
 void Layer::backward(size_t m, float learning_rate) {
 	dim3 threads(x_threads, y_threads, 1);
 	dim3 blocks((width + threads.x - 1) / threads.x, (height + threads.y - 1) / threads.y, 1);
-	weights_backward << <blocks, threads >> > (d_w.get(), d_dw.get(), width, height, m, learning_rate);
+	weights_backward << <blocks, threads >> > (d_weight.get(), d_weight_gradient.get(), width, height, m, learning_rate);
 
-	weights_backwardOnHost(h_w.get(), h_dw.get(), width, height, m, learning_rate);
+	weights_backwardOnHost(h_weight.get(), h_weight_gradient.get(), width, height, m, learning_rate);
 
 	threads = 1;
 	blocks = 1;
-	bias_backward << <blocks, threads >> > (d_b.get(), d_db.get(), learning_rate);
+	bias_backward << <blocks, threads >> > (d_bias.get(), d_bias_gradient.get(), learning_rate);
 }
 
 void Layer::optimize(MNIST dataset, size_t num_iterations, float learning_rate) {
@@ -274,7 +274,7 @@ std::shared_ptr<float> Layer::predict(MNIST dataset) {
 
 	dim3 threads(x_threads, y_threads, 1);
 	dim3 blocks(1, 1, dataset.m);
-	product << <blocks, threads >> > (dataset.d_x.get(), d_w.get(), d_b.get(), d_y_pred.get(), dataset.width, dataset.height, dataset.m);
+	product << <blocks, threads >> > (dataset.d_x.get(), d_weight.get(), d_bias.get(), d_y_pred.get(), dataset.width, dataset.height, dataset.m);
 	cudaDeviceSynchronize();
 
 	return d_y_pred;
