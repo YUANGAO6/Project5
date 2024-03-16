@@ -165,7 +165,7 @@ __global__ void bias_gradient(float* y, float* a, float* db_partial, size_t m) {
 }
 
 
-void Layer::forward(MNIST dataset) {
+float Layer::forward(MNIST dataset) {
 	size_t width = dataset.width;
 	size_t height = dataset.height;
 	size_t m = dataset.m;
@@ -191,7 +191,7 @@ void Layer::forward(MNIST dataset) {
 
 	auto h_cost = sumOnHost<float>(d_cost_partial.get(), blocks.x) / m;
 
-	cout << "Cost: " << h_cost << endl;
+	 // cout << "Cost: " << h_cost << endl;
 
 	threads = threads_num;
 	blocks = (width * height + threads.x - 1) / threads.x;
@@ -215,6 +215,7 @@ void Layer::forward(MNIST dataset) {
 	cudaDeviceSynchronize();
 	auto h_db = sumOnHost<float>(d_db_partial.get(), blocks.x) / m;
 	cudaMemcpy(d_db.get(), &h_db, sizeof(float), cudaMemcpyHostToDevice);
+	return h_cost;
 
 
 }
@@ -260,7 +261,10 @@ void Layer::backward(size_t m, float learning_rate) {
 
 void Layer::optimize(MNIST dataset, size_t num_iterations, float learning_rate) {
 	for (size_t i = 0; i < num_iterations; ++i) {
-		forward(dataset);
+		float temp_cost = forward(dataset);
+		if (i % 100 == 0) {
+			cout << "iter = " << i << "  Cost: " << temp_cost << endl;
+		}
 		backward(dataset.m, learning_rate);
 	}
 }

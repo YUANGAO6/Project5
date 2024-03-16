@@ -10,7 +10,7 @@ public:
 	void optimize(MNIST dataset, size_t num_iterations, float learning_rate);
 	shared_ptr<float> predict(MNIST dataset);
 public:
-	void forward(MNIST dataset);
+	float forward(MNIST dataset);
 	void backward(size_t m, float learning_rate);
 
 	const size_t width, height;

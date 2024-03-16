@@ -69,6 +69,5 @@ void MNIST::test(size_t _m, size_t _width, size_t _height, bool output) {
 				//cout << endl;
 			}
 		}
-		//assert(h_y.get()[i] == (i == 0 || i == 11 ? 1.0f : 0.0f));
 	}
 }

@@ -5,10 +5,10 @@
 using namespace std;
 
 struct MNIST {
-	MNIST(std::istream& images_is, std::istream& labels_is);
+	MNIST(istream& images_is, istream& labels_is);
 
-	void loadImages(std::istream& images_is, size_t* m, size_t* width, size_t* height);
-	void loadLabels(std::istream& labels_is, size_t* m);
+	void loadImages(istream& images_is, size_t* m, size_t* width, size_t* height);
+	void loadLabels(istream& labels_is, size_t* m);
 
 	void test(size_t _m, size_t _width, size_t _height, bool output);
 
